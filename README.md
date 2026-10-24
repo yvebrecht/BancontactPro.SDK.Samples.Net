@@ -8,6 +8,8 @@ Dit sample is verhuisd uit [BancontactPro.Net](https://github.com/yvebrecht/Banc
 
 De bibliotheek is nog niet op NuGet gepubliceerd; het sample verwijst daarom naar een zusterfolder: clone `BancontactPro.Net` naast deze repo (`..\BancontactPro.Net`). Zodra v2 is gepubliceerd wordt dit een `PackageReference`.
 
+**Opzetten en uitproberen:** zie de gids [docs/setting-up-the-samples.md](docs/setting-up-the-samples.md) (Engels): credentials, lokaal draaien, Docker en Portainer, callbacks, een eerste betaling en probleemoplossing.
+
 Zie ook `samples/BancontactPro.Net.Sample.Api/README.md`.
 
 ## Licentie
