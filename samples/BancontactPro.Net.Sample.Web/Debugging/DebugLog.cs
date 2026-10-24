@@ -31,6 +31,12 @@ public sealed record DebugEntry
 
     public string? RequestBody { get; init; }
 
+    /// <summary>The body exactly as received (not pretty-printed): the bytes a callback signature covers.</summary>
+    public string? RawRequestBody { get; init; }
+
+    /// <summary>What the sample worked out about a callback's Signature header, to show why a verification failed.</summary>
+    public string? Analysis { get; init; }
+
     public IReadOnlyList<KeyValuePair<string, string>> ResponseHeaders { get; init; } = [];
 
     public string? ResponseBody { get; init; }

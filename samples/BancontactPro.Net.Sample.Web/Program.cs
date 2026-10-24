@@ -44,6 +44,7 @@ app.MapPost(CallbackPath, async (HttpRequest request, BancontactCallbackVerifier
     var signature = request.Headers["Signature"].ToString();
     var received = new List<KeyValuePair<string, string>>(request.Headers.Select(h => new KeyValuePair<string, string>(h.Key, h.Value.ToString())));
     var text = System.Text.Encoding.UTF8.GetString(body);
+    var analysis = CallbackDiagnostics.Analyse(signature, body);
 
     try
     {
@@ -59,6 +60,8 @@ app.MapPost(CallbackPath, async (HttpRequest request, BancontactCallbackVerifier
             Status = 200,
             RequestHeaders = received,
             RequestBody = DebugLog.Pretty(text),
+            RawRequestBody = text,
+            Analysis = analysis,
             ResponseBody = $"Signature valid. Bancontact request ID: {verified.RequestId}",
         });
         return Results.Ok();
@@ -75,6 +78,8 @@ app.MapPost(CallbackPath, async (HttpRequest request, BancontactCallbackVerifier
             Status = 401,
             RequestHeaders = received,
             RequestBody = DebugLog.Pretty(text),
+            RawRequestBody = text,
+            Analysis = analysis,
             Error = ex.Message,
         });
         return Results.Unauthorized();
