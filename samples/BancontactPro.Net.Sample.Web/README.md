@@ -42,7 +42,7 @@ The environment is `Preprod` unless `BancontactPro:Environment` says `Production
 
 ## Docker
 
-The compose file pulls a prebuilt image, `ghcr.io/yvebrecht/bancontactpro-sample-web`, which the workflow `.github/workflows/sample-web-image.yml` builds and publishes on every push to `main`. That is what lets Portainer and other tools that cannot run a build deploy it: the build needs `BancontactPro.Net` checked out next to this repository, which a stack cannot provide.
+For a step-by-step walkthrough (credentials, callbacks, a first payment, troubleshooting) see the [setup guide](../../docs/setting-up-the-samples.md)., `ghcr.io/yvebrecht/bancontactpro-sample-web`, which the workflow `.github/workflows/sample-web-image.yml` builds and publishes on every push to `main`. That is what lets Portainer and other tools that cannot run a build deploy it: the build needs `BancontactPro.Net` checked out next to this repository, which a stack cannot provide.
 
 ```bash
 cp .env.example .env   # fill in the credentials
