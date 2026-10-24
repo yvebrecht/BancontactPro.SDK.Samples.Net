@@ -42,6 +42,16 @@
                 <h4>Request headers</h4>
                 <pre>@Headers(e.RequestHeaders)</pre>
             }
+            @if (!string.IsNullOrEmpty(e.Analysis))
+            {
+                <h4>Signature analysis</h4>
+                <pre>@e.Analysis</pre>
+            }
+            @if (!string.IsNullOrEmpty(e.RawRequestBody))
+            {
+                <h4>Raw request body (exact bytes)</h4>
+                <pre>@e.RawRequestBody</pre>
+            }
             @if (!string.IsNullOrEmpty(e.RequestBody))
             {
                 <h4>Request body</h4>
