@@ -13,8 +13,11 @@ RUN dotnet restore BancontactPro.SDK.Samples.Net/samples/BancontactPro.Net.Sampl
 COPY BancontactPro.Net/src/ BancontactPro.Net/src/
 COPY BancontactPro.SDK.Samples.Net/samples/BancontactPro.Net.Sample.Web/ BancontactPro.SDK.Samples.Net/samples/BancontactPro.Net.Sample.Web/
 # MinVer reads git tags, which the image build does not have; the sample's own version is irrelevant.
+# Not --no-restore: the first restore (the cached layer above) does not fetch Microsoft.AspNetCore.App.Internal.Assets,
+# the package that carries the Blazor scripts (_framework/blazor.web.js). A restore during publish does, and without it
+# the page links to a script that is not in the image and nothing on it is interactive.
 RUN dotnet publish BancontactPro.SDK.Samples.Net/samples/BancontactPro.Net.Sample.Web/BancontactPro.Net.Sample.Web.csproj \
-    -c Release --no-restore -o /app /p:MinVerSkip=true
+    -c Release -o /app /p:MinVerSkip=true
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
