@@ -35,7 +35,7 @@
     }
     else
     {
-        <label>POS-ID<input @bind="_posId" /></label>
+        <label>POS-ID<input @bind="_posId" maxlength="36" pattern="[A-Za-z0-9]*" title="Letters en cijfers, maximaal 36 tekens" /></label>
     }
     <label>Formaat
         <select @bind="_format">
@@ -70,7 +70,7 @@
     private long _amount = 100;
     private string? _description = "sample";
     private string? _reference;
-    private string _posId = "pos-1";
+    private string _posId = "POS00001";
     private QrCodeImageFormat _format = QrCodeImageFormat.PNG;
     private BancontactEnvironment? _environment;
     private string? _payloadUrl;
