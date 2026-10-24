@@ -1,0 +1,7 @@
+# The build context is the folder above both repositories: keep everything but what the build needs.
+*
+!BancontactPro.Net/src/**
+!BancontactPro.SDK.Samples.Net/samples/BancontactPro.Net.Sample.Web/**
+**/bin
+**/obj
+**/.vs

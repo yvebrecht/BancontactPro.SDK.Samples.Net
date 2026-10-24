@@ -1,0 +1,28 @@
+# The sample web UI in Docker. From this folder, with BancontactPro.Net cloned next to this repository:
+#   cp .env.example .env    # fill in the credentials
+#   docker compose up --build
+# then open http://localhost:5084. The port is published on 127.0.0.1 only: the app has no login and calls Bancontact with your credentials.
+services:
+  sample-web:
+    build:
+      context: ../../..
+      dockerfile: BancontactPro.SDK.Samples.Net/samples/BancontactPro.Net.Sample.Web/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${SAMPLE_WEB_PORT:-5084}:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      # The address Bancontact reaches the callback at (a tunnel to the published port), no trailing slash.
+      PublicBaseUrl: ${PUBLIC_BASE_URL:-http://localhost:5084}
+      BancontactPro__Environment: ${BANCONTACT_ENVIRONMENT:-Preprod}
+      # One API key + PPID pair per product. A product with only one of its two values set stops the app at startup.
+      BancontactPro__Products__StaticQr__ApiKey: ${BANCONTACT_STATICQR_API_KEY:-}
+      BancontactPro__Products__StaticQr__MerchantProfileId: ${BANCONTACT_STATICQR_PPID:-}
+      BancontactPro__Products__OnDisplay__ApiKey: ${BANCONTACT_ONDISPLAY_API_KEY:-}
+      BancontactPro__Products__OnDisplay__MerchantProfileId: ${BANCONTACT_ONDISPLAY_PPID:-}
+      BancontactPro__Products__OnReceipt__ApiKey: ${BANCONTACT_ONRECEIPT_API_KEY:-}
+      BancontactPro__Products__OnReceipt__MerchantProfileId: ${BANCONTACT_ONRECEIPT_PPID:-}
+      BancontactPro__Products__TopUp__ApiKey: ${BANCONTACT_TOPUP_API_KEY:-}
+      BancontactPro__Products__TopUp__MerchantProfileId: ${BANCONTACT_TOPUP_PPID:-}
+      BancontactPro__Products__Invoice__ApiKey: ${BANCONTACT_INVOICE_API_KEY:-}
+      BancontactPro__Products__Invoice__MerchantProfileId: ${BANCONTACT_INVOICE_PPID:-}

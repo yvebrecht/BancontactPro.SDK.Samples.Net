@@ -1,0 +1,105 @@
+@using BancontactPro.Net.Sample.Web.Debugging
+@implements IDisposable
+@inject DebugLog Log
+
+<div class="debug-panel">
+    <div class="debug-tools">
+        <label>Filter <input @bind="_filter" @bind:event="oninput" placeholder="bv. payment-ID" /></label>
+        <button type="button" @onclick="Log.Clear">Wissen</button>
+        <span class="muted">@Visible().Count() van @_all.Count regels, nieuwste eerst</span>
+    </div>
+
+    @foreach (var e in Visible())
+    {
+        <details class="entry @(e.IsFailure ? "fail" : e.Kind == DebugKind.Callback ? "callback" : "")">
+            <summary>
+                <span class="time">@e.At.LocalDateTime.ToString("HH:mm:ss.fff")</span>
+                <span class="kind">@e.Kind</span>
+                @if (e.Status is not null)
+                {
+                    <span class="status">@e.Status</span>
+                }
+                <span class="title">@e.Title</span>
+                @if (e.ElapsedMs is not null)
+                {
+                    <span class="muted">@e.ElapsedMs ms</span>
+                }
+            </summary>
+            @if (e.Url is not null)
+            {
+                <div><strong>@e.Method</strong> <code>@e.Url</code></div>
+            }
+            @if (e.Error is not null)
+            {
+                <div class="error">@e.Error</div>
+            }
+            @if (e.TraceId is not null || e.SpanId is not null)
+            {
+                <div class="trace">traceId: <code>@e.TraceId</code> · spanId: <code>@e.SpanId</code> (dit vraagt Bancontact support)</div>
+            }
+            @if (e.RequestHeaders.Count > 0)
+            {
+                <h4>Request headers</h4>
+                <pre>@Headers(e.RequestHeaders)</pre>
+            }
+            @if (!string.IsNullOrEmpty(e.RequestBody))
+            {
+                <h4>Request body</h4>
+                <pre>@e.RequestBody</pre>
+            }
+            @if (e.ResponseHeaders.Count > 0)
+            {
+                <h4>Response headers</h4>
+                <pre>@Headers(e.ResponseHeaders)</pre>
+            }
+            @if (!string.IsNullOrEmpty(e.ResponseBody))
+            {
+                <h4>@(e.Kind == DebugKind.Request ? "Response body" : "Resultaat")</h4>
+                <pre>@e.ResponseBody</pre>
+            }
+        </details>
+    }
+</div>
+
+@code {
+    /// <summary>Only show entries whose text contains this value; set it to a payment ID to follow one payment.</summary>
+    [Parameter]
+    public string? Filter { get; set; }
+
+    private string _filter = "";
+    private IReadOnlyList<DebugEntry> _all = [];
+
+    protected override void OnInitialized()
+    {
+        _all = Log.Recent();
+        Log.Changed += OnChanged;
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (Filter is not null)
+        {
+            _filter = Filter;
+        }
+    }
+
+    private void OnChanged() => InvokeAsync(() =>
+    {
+        _all = Log.Recent();
+        StateHasChanged();
+    });
+
+    private IEnumerable<DebugEntry> Visible() =>
+        string.IsNullOrWhiteSpace(_filter)
+            ? _all
+            : _all.Where(e => e.Kind == DebugKind.Info || Contains(e, _filter));
+
+    private static bool Contains(DebugEntry e, string text) =>
+        new[] { e.Title, e.Url, e.RequestBody, e.ResponseBody, e.Error }
+            .Any(s => s?.Contains(text, StringComparison.OrdinalIgnoreCase) == true);
+
+    private static string Headers(IEnumerable<KeyValuePair<string, string>> headers) =>
+        string.Join('\n', headers.Select(h => $"{h.Key}: {h.Value}"));
+
+    public void Dispose() => Log.Changed -= OnChanged;
+}

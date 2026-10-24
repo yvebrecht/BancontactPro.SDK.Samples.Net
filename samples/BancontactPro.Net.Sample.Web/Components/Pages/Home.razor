@@ -1,0 +1,53 @@
+@page "/"
+@using BancontactPro.Helpers
+@inject IBancontactCredentialsProvider Credentials
+@inject IBancontactClientFactory Clients
+@inject IConfiguration Config
+
+<PageTitle>Status</PageTitle>
+
+<h1>Status</h1>
+
+@if (_credentials is null)
+{
+    <p>Laden...</p>
+}
+else
+{
+    <table>
+        <tr><th>Omgeving</th><td>@_credentials.Environment</td></tr>
+        <tr><th>Signing key (Refund/Reconciliation)</th><td>@(_credentials.SigningKey is null ? "niet ingesteld (niet nodig voor betalingen)" : "ingesteld")</td></tr>
+        <tr><th>PublicBaseUrl</th><td>@(Config["PublicBaseUrl"] ?? "niet ingesteld: Bancontact kan de callback niet bereiken")</td></tr>
+        <tr><th>Callback-URL</th><td><code>@((Config["PublicBaseUrl"]?.TrimEnd('/') ?? "http://localhost:5084") + "/bancontact/callback")</code></td></tr>
+    </table>
+
+    <h2>Producten</h2>
+    <table>
+        @foreach (var (product, configured) in _products)
+        {
+            <tr>
+                <th>@product</th>
+                <td>@(configured ? "API key en PPID ingesteld" : "niet ingesteld")</td>
+            </tr>
+        }
+    </table>
+}
+
+<p class="muted">
+    Deze app roept Bancontact aan met jouw credentials en hoort lokaal te blijven (hij luistert alleen op localhost).
+    Zet credentials in user-secrets, zie README.
+</p>
+
+@code {
+    private BancontactCredentials? _credentials;
+    private readonly List<(BancontactProduct, bool)> _products = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _credentials = await Credentials.GetCredentialsAsync();
+        foreach (var product in Enum.GetValues<BancontactProduct>())
+        {
+            _products.Add((product, await Clients.IsConfiguredAsync(product)));
+        }
+    }
+}

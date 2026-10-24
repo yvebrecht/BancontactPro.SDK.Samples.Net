@@ -1,0 +1,49 @@
+@page "/callbacks"
+@using BancontactPro.Net.Sample.Web.Debugging
+@implements IDisposable
+@inject CallbackLog Log
+
+<PageTitle>Callbacks</PageTitle>
+
+<h1>Callbacks</h1>
+<p class="muted">De laatste geverifieerde callbacks, nieuwste eerst. Mislukte verificaties staan op de Debug-pagina.</p>
+
+@if (_callbacks.Count == 0)
+{
+    <p>Nog geen callbacks ontvangen.</p>
+}
+else
+{
+    <table>
+        <tr><th>Ontvangen</th><th>Betaling</th><th>Status</th><th>Bedrag</th><th>Debtor</th><th>Request-ID</th></tr>
+        @foreach (var c in _callbacks)
+        {
+            <tr>
+                <td>@c.ReceivedAt.LocalDateTime.ToString("HH:mm:ss")</td>
+                <td><code>@c.Payload.PaymentId</code></td>
+                <td><span class="badge @c.Payload.Status">@c.Payload.Status</span></td>
+                <td>@(c.Payload.Amount / 100m) @c.Payload.Currency</td>
+                <td>@c.Payload.Debtor.Name @c.Payload.Debtor.Iban</td>
+                <td><code>@c.RequestId</code></td>
+            </tr>
+        }
+    </table>
+}
+
+@code {
+    private IReadOnlyList<ReceivedCallback> _callbacks = [];
+
+    protected override void OnInitialized()
+    {
+        _callbacks = Log.Recent();
+        Log.Changed += OnChanged;
+    }
+
+    private void OnChanged() => InvokeAsync(() =>
+    {
+        _callbacks = Log.Recent();
+        StateHasChanged();
+    });
+
+    public void Dispose() => Log.Changed -= OnChanged;
+}

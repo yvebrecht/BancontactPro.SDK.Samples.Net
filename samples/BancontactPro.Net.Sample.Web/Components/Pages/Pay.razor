@@ -1,0 +1,259 @@
+@page "/pay"
+@using BancontactPro.Helpers
+@using BancontactPro.Models
+@using BancontactPro.Net.Sample.Web.Debugging
+@implements IDisposable
+@inject IBancontactClientFactory Clients
+@inject IConfiguration Config
+@inject DebugLog Debug
+@inject CallbackLog Callbacks
+
+<PageTitle>Betaling</PageTitle>
+
+<h1>Betaling</h1>
+
+<EditForm Model="_form" OnValidSubmit="CreateAsync" FormName="create-payment">
+    <div class="form-grid">
+        <label>Product
+            <select @bind="_form.Product">
+                @foreach (var product in Enum.GetValues<BancontactProduct>())
+                {
+                    <option value="@product">@product</option>
+                }
+            </select>
+        </label>
+        <label>Bedrag (in eurocent)
+            <input type="number" min="1" @bind="_form.Amount" />
+        </label>
+        <label>Omschrijving
+            <input @bind="_form.Description" />
+        </label>
+        <label>Referentie
+            <input @bind="_form.Reference" />
+        </label>
+        @if (_form.Product == BancontactProduct.StaticQr)
+        {
+            <label>POS-ID (Static QR)
+                <input @bind="_form.PosId" />
+            </label>
+        }
+    </div>
+    <button type="submit" disabled="@_busy">Betaling aanmaken</button>
+    <span class="muted">De callback gaat naar <code>@CallbackUrl</code>.</span>
+</EditForm>
+
+@if (_error is not null)
+{
+    <p class="error">@_error</p>
+}
+
+@if (_payment is not null)
+{
+    <section class="payment">
+        <h2>Betaling @_payment.PaymentId</h2>
+        <p>
+            Status: <strong class="badge @_payment.Status">@_payment.Status</strong>
+            @if (_polling)
+            {
+                <span class="muted">(wordt elke 2 s opgevraagd)</span>
+            }
+            · @FormatAmount(_payment.Amount, _payment.Currency)
+            · verloopt @_payment.ExpiresAt.LocalDateTime.ToString("HH:mm:ss")
+        </p>
+
+        <div class="qr-row">
+            <img src="@_payment.Links.Qrcode.Href" alt="QR-code" class="qr" />
+            <div>
+                <p>Scan met de Bancontact Pay testapp.</p>
+                <p>QR-URL: <code>@_payment.Links.Qrcode.Href</code></p>
+                <p>Deeplink: <a href="@_payment.Links.Deeplink.Href"><code>@_payment.Links.Deeplink.Href</code></a></p>
+                <button type="button" @onclick="CancelAsync" disabled="@(_busy || IsFinal(_payment.Status))">Annuleren</button>
+                <button type="button" @onclick="RefreshAsync" disabled="@_busy">Nu vernieuwen</button>
+            </div>
+        </div>
+
+        <h3>Statusverloop</h3>
+        <ul class="timeline">
+            @foreach (var (at, source, status) in _timeline)
+            {
+                <li><span class="time">@at.LocalDateTime.ToString("HH:mm:ss")</span> <span class="badge @status">@status</span> <span class="muted">@source</span></li>
+            }
+        </ul>
+    </section>
+}
+
+<h2>Debug</h2>
+<DebugPanel Filter="@_payment?.PaymentId" />
+
+@code {
+    private readonly CreateForm _form = new();
+    private CreatePaymentResponse? _payment;
+    private readonly List<(DateTimeOffset At, string Source, MerchantPaymentStatus Status)> _timeline = [];
+    private bool _busy;
+    private bool _polling;
+    private string? _error;
+    private CancellationTokenSource? _pollCts;
+
+    private string CallbackUrl => (Config["PublicBaseUrl"]?.TrimEnd('/') ?? "http://localhost:5084") + "/bancontact/callback";
+
+    protected override void OnInitialized() => Callbacks.Changed += OnCallback;
+
+    private async Task CreateAsync()
+    {
+        await RunAsync(async () =>
+        {
+            StopPolling();
+            _timeline.Clear();
+            var payments = await Clients.PaymentsAsync(_form.Product);
+            var description = string.IsNullOrWhiteSpace(_form.Description) ? null : _form.Description;
+            var reference = string.IsNullOrWhiteSpace(_form.Reference) ? null : _form.Reference;
+            _payment = _form.Product == BancontactProduct.StaticQr
+                ? await payments.CreateStaticQrPaymentAsync(new CreateStaticQrPaymentRequest(_form.Amount, _form.PosId, reference, Description: description, CallbackUrl: CallbackUrl))
+                : await payments.CreateAsync(new CreatePaymentRequest(_form.Amount, reference, Description: description, CallbackUrl: CallbackUrl));
+            Record("aangemaakt", _payment.Status);
+            StartPolling();
+        });
+    }
+
+    private async Task RefreshAsync()
+    {
+        await RunAsync(async () =>
+        {
+            if (_payment is null)
+            {
+                return;
+            }
+
+            var current = await (await Clients.PaymentsAsync(_form.Product)).GetAsync(_payment.PaymentId);
+            _payment = _payment with { Status = current.Status };
+            Record("opgevraagd", current.Status);
+            if (IsFinal(current.Status))
+            {
+                StopPolling();
+            }
+        });
+    }
+
+    private async Task CancelAsync()
+    {
+        await RunAsync(async () =>
+        {
+            if (_payment is not null)
+            {
+                await (await Clients.PaymentsAsync(_form.Product)).CancelAsync(_payment.PaymentId);
+                Debug.Info($"Betaling {_payment.PaymentId} geannuleerd");
+            }
+        });
+        await RefreshAsync();
+    }
+
+    private void StartPolling()
+    {
+        _pollCts = new CancellationTokenSource();
+        _polling = true;
+        _ = PollAsync(_pollCts.Token);
+    }
+
+    private void StopPolling()
+    {
+        _pollCts?.Cancel();
+        _pollCts = null;
+        _polling = false;
+    }
+
+    private async Task PollAsync(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(ct) && _payment is not null)
+            {
+                var current = await (await Clients.PaymentsAsync(_form.Product, ct)).GetAsync(_payment.PaymentId, ct);
+                await InvokeAsync(() =>
+                {
+                    if (current.Status != _payment.Status)
+                    {
+                        _payment = _payment with { Status = current.Status };
+                        Record("opgevraagd", current.Status);
+                    }
+
+                    if (IsFinal(current.Status))
+                    {
+                        StopPolling();
+                    }
+
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            // The failed call is already in the debug log; stop polling instead of hammering a failing endpoint.
+            await InvokeAsync(() =>
+            {
+                _error = $"Opvragen gestopt: {ex.Message}";
+                _polling = false;
+                StateHasChanged();
+            });
+        }
+    }
+
+    private void OnCallback() => InvokeAsync(() =>
+    {
+        if (_payment is not null && Callbacks.Recent(_payment.PaymentId).FirstOrDefault() is { } latest
+            && !_timeline.Any(t => t.Source == $"callback {latest.RequestId}"))
+        {
+            _payment = _payment with { Status = latest.Payload.Status };
+            _timeline.Add((latest.ReceivedAt, $"callback {latest.RequestId}", latest.Payload.Status));
+            StateHasChanged();
+        }
+    });
+
+    private void Record(string source, MerchantPaymentStatus status) => _timeline.Add((DateTimeOffset.UtcNow, source, status));
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await action();
+        }
+        catch (Exception ex)
+        {
+            // The request and Bancontact's answer, with trace IDs, are in the debug log below.
+            _error = $"{ex.GetType().Name}: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static bool IsFinal(MerchantPaymentStatus status) => status is MerchantPaymentStatus.SUCCEEDED or MerchantPaymentStatus.FAILED
+        or MerchantPaymentStatus.CANCELLED or MerchantPaymentStatus.EXPIRED or MerchantPaymentStatus.AUTHORIZATION_FAILED or MerchantPaymentStatus.VOIDED;
+
+    private static string FormatAmount(long cents, string currency) => $"{cents / 100m:0.00} {currency}";
+
+    public void Dispose()
+    {
+        StopPolling();
+        Callbacks.Changed -= OnCallback;
+    }
+
+    private sealed class CreateForm
+    {
+        public BancontactProduct Product { get; set; } = BancontactProduct.OnDisplay;
+
+        public long Amount { get; set; } = 100;
+
+        public string? Description { get; set; } = "sample payment";
+
+        public string? Reference { get; set; }
+
+        public string PosId { get; set; } = "pos-1";
+    }
+}

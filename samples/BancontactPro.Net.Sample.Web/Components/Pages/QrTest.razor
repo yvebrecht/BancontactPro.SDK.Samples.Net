@@ -1,0 +1,104 @@
+@page "/qr"
+@using BancontactPro.Helpers
+@using BancontactPro.QrCodes
+@inject IBancontactCredentialsProvider CredentialsProvider
+@inject Debugging.DebugLog Debug
+
+<PageTitle>QR-test</PageTitle>
+
+<h1>QR-test</h1>
+<p>
+    Bouwt de payload-URL's die de gidsen beschrijven, zonder API-call, met de PPID van het product en de hosts van de
+    geconfigureerde omgeving. Scan het QR-beeld met de preprod testapp en noteer of de app het opent.
+</p>
+
+<div class="form-grid">
+    <label>Product
+        <select @bind="_product">
+            @foreach (var product in Enum.GetValues<BancontactProduct>())
+            {
+                <option value="@product">@product</option>
+            }
+        </select>
+    </label>
+    <label>Type
+        <select @bind="_kind">
+            <option value="@Kind.Fixed">Vast bedrag (/t/1/{PPID})</option>
+            <option value="@Kind.Pos">Static QR kassa (/l/1/{PPID}/{POSId})</option>
+        </select>
+    </label>
+    @if (_kind == Kind.Fixed)
+    {
+        <label>Bedrag (eurocent)<input type="number" min="1" @bind="_amount" /></label>
+        <label>Omschrijving<input @bind="_description" /></label>
+        <label>Referentie<input @bind="_reference" /></label>
+    }
+    else
+    {
+        <label>POS-ID<input @bind="_posId" /></label>
+    }
+    <label>Formaat
+        <select @bind="_format">
+            @foreach (var format in Enum.GetValues<QrCodeImageFormat>())
+            {
+                <option value="@format">@format</option>
+            }
+        </select>
+    </label>
+</div>
+<button type="button" @onclick="BuildAsync">Bouw QR</button>
+
+@if (_error is not null)
+{
+    <p class="error">@_error</p>
+}
+
+@if (_payloadUrl is not null)
+{
+    <p>Omgeving: <strong>@_environment</strong></p>
+    <p>Payload-URL: <code>@_payloadUrl</code></p>
+    <p>Generator-URL: <code>@_imageUrl</code></p>
+    <img src="@_imageUrl" alt="QR-code" class="qr" @onerror="OnImageError" />
+    <p class="muted">Ziet u geen beeld? Open de generator-URL in een tabblad: een 400 betekent dat de generator de host van de payload weigert.</p>
+}
+
+@code {
+    private enum Kind { Fixed, Pos }
+
+    private BancontactProduct _product = BancontactProduct.OnDisplay;
+    private Kind _kind = Kind.Fixed;
+    private long _amount = 100;
+    private string? _description = "sample";
+    private string? _reference;
+    private string _posId = "pos-1";
+    private QrCodeImageFormat _format = QrCodeImageFormat.PNG;
+    private BancontactEnvironment? _environment;
+    private string? _payloadUrl;
+    private string? _imageUrl;
+    private string? _error;
+
+    private async Task BuildAsync()
+    {
+        _error = null;
+        try
+        {
+            var credentials = await CredentialsProvider.GetCredentialsAsync();
+            var ppid = credentials.GetCredentials(_product)?.MerchantProfileId ?? throw new BancontactProductNotConfiguredException(_product);
+            _environment = credentials.Environment;
+            _payloadUrl = _kind == Kind.Fixed
+                ? PaymentLinkBuilder.BuildFixedAmountPaymentUrl(credentials.Environment, ppid, _amount, NullIfEmpty(_description), NullIfEmpty(_reference))
+                : PaymentLinkBuilder.BuildStaticQrLocationUrl(credentials.Environment, ppid, _posId);
+            _imageUrl = PaymentLinkBuilder.BuildQrCodeImageUrl(credentials.Environment, _payloadUrl, _format);
+            Debug.Info($"QR-payload gebouwd ({_kind}, {credentials.Environment})", $"payload: {_payloadUrl}\nafbeelding: {_imageUrl}");
+        }
+        catch (Exception ex)
+        {
+            _payloadUrl = null;
+            _error = ex.Message;
+        }
+    }
+
+    private void OnImageError() => Debug.Info("QR-afbeelding kon niet geladen worden", _imageUrl);
+
+    private static string? NullIfEmpty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
+}

@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/samples/">
+    <Project Path="samples/BancontactPro.Net.Sample.Api/BancontactPro.Net.Sample.Api.csproj" />
+    <Project Path="samples/BancontactPro.Net.Sample.Web/BancontactPro.Net.Sample.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/BancontactPro.Net.Sample.Api.Tests/BancontactPro.Net.Sample.Api.Tests.csproj" />
+  </Folder>
+</Solution>
