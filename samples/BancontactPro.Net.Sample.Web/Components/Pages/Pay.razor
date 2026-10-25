@@ -34,7 +34,7 @@
         @if (_form.Product == BancontactProduct.StaticQr)
         {
             <label>POS-ID (Static QR)
-                <input @bind="_form.PosId" />
+                <input @bind="_form.PosId" maxlength="36" pattern="[A-Za-z0-9]*" title="Letters en cijfers, maximaal 36 tekens" />
             </label>
         }
     </div>
@@ -93,6 +93,7 @@
     private bool _polling;
     private string? _error;
     private CancellationTokenSource? _pollCts;
+    private static readonly System.Text.RegularExpressions.Regex PosIdPattern = new("^[A-Za-z0-9]{1,36}$");
 
     private string CallbackUrl => (Config["PublicBaseUrl"]?.TrimEnd('/') ?? "http://localhost:5084") + "/bancontact/callback";
 
@@ -102,15 +103,24 @@
     {
         await RunAsync(async () =>
         {
-            StopPolling();
-            _timeline.Clear();
+            // Bancontact's spec: posId is letters and digits only, at most 36 characters.
+            if (_form.Product == BancontactProduct.StaticQr && !PosIdPattern.IsMatch(_form.PosId ?? ""))
+            {
+                throw new InvalidOperationException("POS-ID: alleen letters en cijfers, maximaal 36 tekens (bv. POS00001).");
+            }
+
             var payments = await Clients.PaymentsAsync(_form.Product);
             var description = string.IsNullOrWhiteSpace(_form.Description) ? null : _form.Description;
             var reference = string.IsNullOrWhiteSpace(_form.Reference) ? null : _form.Reference;
-            _payment = _form.Product == BancontactProduct.StaticQr
-                ? await payments.CreateStaticQrPaymentAsync(new CreateStaticQrPaymentRequest(_form.Amount, _form.PosId, reference, Description: description, CallbackUrl: CallbackUrl))
+            var created = _form.Product == BancontactProduct.StaticQr
+                ? await payments.CreateStaticQrPaymentAsync(new CreateStaticQrPaymentRequest(_form.Amount, _form.PosId!, reference, Description: description, CallbackUrl: CallbackUrl))
                 : await payments.CreateAsync(new CreatePaymentRequest(_form.Amount, reference, Description: description, CallbackUrl: CallbackUrl));
-            Record("aangemaakt", _payment.Status);
+
+            // Only now: a failed attempt must not wipe the history of the payment still on screen.
+            StopPolling();
+            _timeline.Clear();
+            _payment = created;
+            Record("aangemaakt", created.Status);
             StartPolling();
         });
     }
@@ -254,6 +264,6 @@
 
         public string? Reference { get; set; }
 
-        public string PosId { get; set; } = "pos-1";
+        public string PosId { get; set; } = "POS00001";
     }
 }
